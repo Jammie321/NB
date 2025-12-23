@@ -574,6 +574,11 @@
             return smartFormatNumber(num);
         }
 
+        // 判断数字是否为小数（非整数）
+        function isDecimal(num) {
+            return !Number.isInteger(num) && !isNaN(num);
+        }
+
         // 主计算函数
         function calculate() {
             const inputText = numberInput.value.trim();
@@ -608,6 +613,8 @@
 
             // 构建分组：每个"各"或"各数"之前的所有数算作一组数
             const groups = [];
+            // 记录上一组乘数是否为小数（影响下一组计算逻辑）
+            let prevIsDecimal = false;
             
             // 遍历所有匹配项，每组都是当前匹配项之前的所有数
             for (let i = 0; i < geNumbers.length; i++) {
@@ -638,7 +645,9 @@
                     let calculation;
                     let total;
                     
-                    // 核心规则：第一组用个数直接乘，其他组用个数-1乘
+                    // 核心计算逻辑：
+                    // 第 1 组：组内数字的个数 × 乘数
+                    // 第 2 组及以后：根据上一组乘数是否为小数决定减1或减2，直接显示计算后的值
                     if (i === 0) {
                         // 第1组：个数直接相乘
                         displayCount = groupNumbers.length;
@@ -648,10 +657,13 @@
                         const formattedTotal = formatNumberForDisplay(total);
                         calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
                     } else {
-                        // 其他组：个数-1相乘
-                        displayCount = Math.max(0, groupNumbers.length - 1);
+                        // 第2组及以后：根据上一组乘数类型决定减1或减2，直接显示结果值
+                        const subtractNum = prevIsDecimal ? 2 : 1;
+                        displayCount = groupNumbers.length - subtractNum;
+                        // 确保不会出现负数
+                        displayCount = Math.max(0, displayCount);
                         total = displayCount * multiplier; // 原始值用于总金额计算
-                        // 显示时智能格式化
+                        // 显示时直接用计算后的count（如3-2=1，显示1）
                         const formattedMultiplier = formatNumberForDisplay(multiplier);
                         const formattedTotal = formatNumberForDisplay(total);
                         calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
@@ -664,6 +676,9 @@
                         total: total, // 原始值
                         calculation: calculation
                     });
+                    
+                    // 记录当前组乘数是否为小数，供下一组判断
+                    prevIsDecimal = isDecimal(multiplier);
                 }
             }
 
