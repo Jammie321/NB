@@ -539,17 +539,31 @@
             }, 3000);
         }
 
-        // 智能格式化数字：去掉末尾无用的0
+        // 智能格式化数字：
+        // - 整数：不显示小数点和零（100 → 100）
+        // - 一位小数：显示一位（100.5 → 100.5）
+        // - 两位小数：显示两位（100.12 → 100.12）
+        // - 多于两位：四舍五入保留两位后再格式化
         function smartFormatNumber(num) {
-            // 先转成字符串，处理小数
-            let numStr = num.toString();
+            // 先保留两位小数（处理四舍五入）
+            const fixedNum = parseFloat(num.toFixed(2));
             
-            // 如果有小数点
-            if (numStr.includes('.')) {
-                // 去掉末尾的0
-                numStr = numStr.replace(/0+$/, '');
-                // 如果最后是小数点，也去掉
-                numStr = numStr.replace(/\.$/, '');
+            // 判断是否为整数
+            if (Number.isInteger(fixedNum)) {
+                return fixedNum.toString();
+            }
+            
+            // 转换为字符串
+            let numStr = fixedNum.toString();
+            
+            // 检查是否以 .0 结尾（一位小数）
+            if (numStr.endsWith('.0')) {
+                return numStr.replace('.0', '');
+            }
+            
+            // 检查是否以 0 结尾（两位小数但最后一位是0）
+            if (numStr.endsWith('0') && numStr.includes('.')) {
+                return numStr.slice(0, -1);
             }
             
             return numStr;
@@ -557,9 +571,7 @@
 
         // 格式化数字为合适的显示格式（用于分组明细）
         function formatNumberForDisplay(num) {
-            // 先保留两位小数，再智能格式化
-            const withTwoDecimals = num.toFixed(2);
-            return smartFormatNumber(parseFloat(withTwoDecimals));
+            return smartFormatNumber(num);
         }
 
         // 主计算函数
@@ -631,7 +643,7 @@
                         // 第1组：个数直接相乘
                         displayCount = groupNumbers.length;
                         total = displayCount * multiplier; // 原始值用于总金额计算
-                        // 显示时智能格式化（保留两位小数后去掉末尾0）
+                        // 显示时智能格式化
                         const formattedMultiplier = formatNumberForDisplay(multiplier);
                         const formattedTotal = formatNumberForDisplay(total);
                         calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
@@ -639,7 +651,7 @@
                         // 其他组：个数-1相乘
                         displayCount = Math.max(0, groupNumbers.length - 1);
                         total = displayCount * multiplier; // 原始值用于总金额计算
-                        // 显示时智能格式化（保留两位小数后去掉末尾0）
+                        // 显示时智能格式化
                         const formattedMultiplier = formatNumberForDisplay(multiplier);
                         const formattedTotal = formatNumberForDisplay(total);
                         calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
@@ -649,7 +661,7 @@
                         numbers: groupNumbers,
                         displayCount: displayCount,
                         multiplier: multiplier,
-                        total: total, // 原始值，不保留小数
+                        total: total, // 原始值
                         calculation: calculation
                     });
                 }
@@ -666,7 +678,7 @@
             // 显示分组结果
             displayResults(groups);
             
-            // 计算并显示总金额（使用原始值计算，显示时智能格式化）
+            // 计算并显示总金额
             const totalAmount = groups.reduce((sum, group) => sum + group.total, 0);
             displayTotal(totalAmount);
         }
@@ -718,7 +730,6 @@
         // 显示总金额（智能格式化）
         function displayTotal(total) {
             const totalAmount = document.getElementById('totalAmount');
-            // 显示时智能格式化，计算时使用原始值
             totalAmount.textContent = `¥${smartFormatNumber(total)}`;
         }
 
@@ -795,4 +806,3 @@
     </script>
 </body>
 </html>
-
