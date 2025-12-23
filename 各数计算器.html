@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能计算器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: white;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .calculator-container {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px; /* 进一步缩小整体间距 */
+        }
+
+        .input-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .number-input-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .number-input {
+            width: 100%;
+            min-height: 120px;
+            max-height: 180px; /* 默认最大高度 */
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 15px;
+            color: white;
+            font-size: 18px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            transition: all 0.3s ease;
+            overflow-y: auto;
+        }
+
+        .number-input.expanded {
+            max-height: 400px; /* 展开后的最大高度 */
+        }
+
+        .number-input:focus {
+            border-color: #007AFF;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .number-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 展开/收起按钮样式 - 长条美化版 */
+        .expand-collapse-btn {
+            width: 100%;
+            height: 44px;
+            background: linear-gradient(135deg, rgba(0, 122, 255, 0.2), rgba(88, 86, 214, 0.2));
+            border: 1px solid rgba(0, 122, 255, 0.3);
+            border-radius: 12px;
+            color: #007AFF;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .expand-collapse-btn:hover {
+            background: linear-gradient(135deg, rgba(0, 122, 255, 0.3), rgba(88, 86, 214, 0.3));
+            border-color: rgba(0, 122, 255, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .expand-collapse-btn:active {
+            transform: translateY(0);
+        }
+
+        .expand-collapse-btn .icon {
+            font-size: 18px;
+            transition: transform 0.3s ease;
+        }
+
+
+        /* 按钮行样式 */
+        .button-row {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+            margin-top: 5px; /* 缩小按钮行间距 */
+        }
+
+        .calculate-btn {
+            flex: 2; /* 计算按钮占比更大 */
+            height: 56px;
+            background: linear-gradient(135deg, #34C759, #30D158);
+            border: none;
+            border-radius: 28px;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(52, 199, 89, 0.3);
+        }
+
+        .calculate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(52, 199, 89, 0.4);
+        }
+
+        .calculate-btn:active {
+            transform: translateY(0);
+        }
+
+        .total-result {
+            background: linear-gradient(135deg, #007AFF, #5856D6);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            margin-top: 3px; /* 大幅缩小与输入框的间距 */
+            box-shadow: 0 8px 24px rgba(0, 122, 255, 0.2);
+        }
+
+        .total-label {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .total-amount {
+            color: white;
+            font-size: 36px;
+            font-weight: 700;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .action-btn {
+            flex: 1;
+            height: 56px; /* 统一高度 */
+            border: none;
+            border-radius: 28px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .clear-btn {
+            background: linear-gradient(135deg, #FF3B30, #FF453A);
+            box-shadow: 0 4px 15px rgba(255, 59, 48, 0.3);
+        }
+
+        .clear-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 59, 48, 0.4);
+        }
+
+        .undo-btn {
+            background: linear-gradient(135deg, #FF9500, #FF9F0A);
+            box-shadow: 0 4px 15px rgba(255, 149, 0, 0.3);
+        }
+
+        .undo-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 149, 0, 0.4);
+        }
+
+        .undo-btn:disabled {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+            margin-top: 8px;
+        }
+
+        .content-area::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .content-area::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+        }
+
+        .result-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-title {
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-group {
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .result-calculation {
+            color: #34C759;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: right;
+            flex: 1;
+            margin-left: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            padding: 40px 20px;
+        }
+
+        .error-message {
+            color: #FF3B30;
+            font-size: 14px;
+            text-align: center;
+            margin-top: -25px;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="calculator-container">
+        <div class="input-section">
+            <div class="number-input-wrapper">
+                <textarea 
+                    id="numberInput" 
+                    class="number-input" 
+                    placeholder="请输入数字，每组各字前的数排除第一个：&#10;例如：100，200，300各50 400，500各18"
+                    inputmode="numeric"
+                ></textarea>
+            </div>
+            
+            <!-- 展开/收起按钮 - 长条样式 -->
+            <button id="expandCollapseBtn" class="expand-collapse-btn">
+                <span class="icon">▼</span>
+                <span class="text">展开输入框</span>
+            </button>
+            
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+
+        <div class="total-result" id="totalResult">
+            <div class="total-label">总金额</div>
+            <div class="total-amount" id="totalAmount">¥0</div>
+        </div>
+
+        <!-- 按钮行：清除、撤回、计算金额在同一行 -->
+        <div class="button-row">
+            <button class="action-btn clear-btn" onclick="clearAll()">清除</button>
+            <button class="action-btn undo-btn" id="undoBtn" onclick="undoClear()" disabled>撤回</button>
+            <button class="calculate-btn" onclick="calculate()">计算金额</button>
+        </div>
+        
+        <div class="content-area">
+            <div id="resultSection" style="display: none;">
+                <div class="result-section">
+                    <div class="result-title">分组明细</div>
+                    <div id="groupResults"></div>
+                </div>
+            </div>
+
+            <div id="emptyState" class="empty-state">
+                输入数据后将显示计算结果
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const numberInput = document.getElementById('numberInput');
+        const emptyState = document.getElementById('emptyState');
+        const undoBtn = document.getElementById('undoBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const expandCollapseBtn = document.getElementById('expandCollapseBtn');
+        const btnText = expandCollapseBtn.querySelector('.text');
+        const btnIcon = expandCollapseBtn.querySelector('.icon');
+        
+        // 存储清除前的数据用于撤回
+        let backupDataStack = [];
+        let isExpanded = false; // 输入框展开状态
+        
+        // 自动调整输入框高度
+        numberInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            const maxHeight = isExpanded ? 400 : 180;
+            this.style.height = Math.min(this.scrollHeight, maxHeight) + 'px';
+            errorMessage.textContent = '';
+        });
+
+        // 展开/收起按钮点击事件
+        expandCollapseBtn.addEventListener('click', function() {
+            isExpanded = !isExpanded;
+            numberInput.classList.toggle('expanded', isExpanded);
+            this.classList.toggle('expanded', isExpanded);
+            
+            // 更新按钮文本和图标
+            if (isExpanded) {
+                btnText.textContent = '收起输入框';
+                btnIcon.textContent = '▲';
+            } else {
+                btnText.textContent = '展开输入框';
+                btnIcon.textContent = '▼';
+            }
+            
+            // 重新调整高度
+            numberInput.style.height = 'auto';
+            const maxHeight = isExpanded ? 400 : 180;
+            numberInput.style.height = Math.min(numberInput.scrollHeight, maxHeight) + 'px';
+            
+            // 滚动到输入框
+            numberInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+
+        // 汉字数字转阿拉伯数字的映射表
+        const chineseNumMap = {
+            '零': 0, '〇': 0,
+            '一': 1, '壹': 1,
+            '二': 2, '贰': 2, '两': 2,
+            '三': 3, '叁': 3,
+            '四': 4, '肆': 4,
+            '五': 5, '伍': 5,
+            '六': 6, '陆': 6,
+            '七': 7, '柒': 7,
+            '八': 8, '捌': 8,
+            '九': 9, '玖': 9,
+            '十': 10, '拾': 10,
+            '百': 100, '佰': 100,
+            '千': 1000, '仟': 1000,
+            '万': 10000, '萬': 10000,
+            '亿': 100000000, '億': 100000000
+        };
+
+        // 解析汉字数字为阿拉伯数字
+        function parseChineseNumber(chineseStr) {
+            if (!chineseStr || chineseStr.length === 0) return NaN;
+            
+            // 处理特殊情况：十、二十、三十等
+            const specialCases = /^([零一二三四五六七八九两]*)十([零一二三四五六七八九两]*)$/;
+            const match = chineseStr.match(specialCases);
+            
+            if (match) {
+                let tens = 0;
+                let units = 0;
+                
+                if (match[1]) tens = chineseNumMap[match[1]] || 0;
+                if (match[2]) units = chineseNumMap[match[2]] || 0;
+                
+                // 处理 "十" 等于 10，"二十" 等于 20 等情况
+                if (tens === 0 && match[1] === '' && match[2] === '') return 10;
+                if (tens === 0 && match[1] === '') tens = 1;
+                
+                return tens * 10 + units;
+            }
+            
+            // 处理单个汉字数字
+            if (chineseStr.length === 1) {
+                return chineseNumMap[chineseStr] || NaN;
+            }
+            
+            // 处理更复杂的数字（简化版，支持到万级）
+            let result = 0;
+            let temp = 0;
+            
+            for (let i = 0; i < chineseStr.length; i++) {
+                const char = chineseStr[i];
+                const num = chineseNumMap[char];
+                
+                if (isNaN(num)) return NaN;
+                
+                if (num >= 10000) {
+                    result += temp * num;
+                    temp = 0;
+                } else if (num >= 1000) {
+                    temp += (temp === 0 ? 1 : 0) * num;
+                } else if (num >= 100) {
+                    temp += (temp === 0 ? 1 : 0) * num;
+                } else if (num >= 10) {
+                    temp += (temp === 0 ? 1 : 0) * num;
+                } else {
+                    temp += num;
+                }
+            }
+            
+            result += temp;
+            return result > 0 ? result : NaN;
+        }
+
+        // 从文本中提取"各"或"各数"后的数字（包括汉字数字）
+        function extractNumberAfterGe(text, startIndex) {
+            // 截取起始位置后的文本
+            const subText = text.substring(startIndex).trim();
+            
+            // 先尝试匹配阿拉伯数字
+            const arabicMatch = subText.match(/^\d+(\.\d+)?/);
+            if (arabicMatch) {
+                return parseFloat(arabicMatch[0]);
+            }
+            
+            // 匹配汉字数字
+            const chineseNumChars = /^[零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]+/;
+            const chineseMatch = subText.match(chineseNumChars);
+            
+            if (chineseMatch) {
+                const chineseNum = parseChineseNumber(chineseMatch[0]);
+                return isNaN(chineseNum) ? NaN : chineseNum;
+            }
+            
+            return NaN;
+        }
+
+        // 解析数字（支持阿拉伯数字和汉字数字）
+        function parseNumbers(text) {
+            const separators = /[,，.。、\s\?\!\+\-\"';\:\/\\\(\)\[\]\{\}\<\>《》#@￥…&a-zA-Z]+/g;
+            const parts = text.split(separators)
+                      .map(s => s.trim())
+                      .filter(s => s.length > 0);
+            
+            const numbers = [];
+            
+            parts.forEach(part => {
+                // 先尝试解析为阿拉伯数字
+                const arabicNum = parseFloat(part);
+                if (!isNaN(arabicNum) && arabicNum >= 0) {
+                    numbers.push(arabicNum);
+                    return;
+                }
+                
+                // 再尝试解析为汉字数字
+                const chineseNum = parseChineseNumber(part);
+                if (!isNaN(chineseNum) && chineseNum >= 0) {
+                    numbers.push(chineseNum);
+                }
+            });
+            
+            return numbers;
+        }
+
+        // 检查字符串是否为汉字数字
+        function isChineseNumber(str) {
+            const chineseNumChars = /^[零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]+$/;
+            return chineseNumChars.test(str);
+        }
+
+        // 查找所有"各"或"各数"及其后的数字
+        function findGeAndNumbers(text) {
+            const results = [];
+            // 匹配"各数"或"各"（优先匹配"各数"）
+            const geRegex = /各数|各/g;
+            let match;
+            
+            while ((match = geRegex.exec(text)) !== null) {
+                const geText = match[0]; // 匹配到的是"各"或"各数"
+                const offset = geText.length; // 偏移量："各"是1，"各数"是2
+                
+                // 提取数字（支持汉字和阿拉伯数字）
+                const number = extractNumberAfterGe(text, match.index + offset);
+                const remainingText = text.substring(match.index + offset);
+                const firstNumberIndex = remainingText.search(/[0-9零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]/);
+                
+                let beforeNumberText = '';
+                if (firstNumberIndex !== -1) {
+                    beforeNumberText = remainingText.substring(0, firstNumberIndex).trim();
+                }
+                
+                results.push({
+                    position: match.index,
+                    length: offset, // 匹配文本的长度
+                    number: number,
+                    beforeNumberText: beforeNumberText,
+                    geText: geText // 匹配到的文本（各/各数）
+                });
+            }
+            
+            return results;
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            errorMessage.textContent = message;
+            setTimeout(() => {
+                errorMessage.textContent = '';
+            }, 3000);
+        }
+
+        // 智能格式化数字：去掉末尾无用的0
+        function smartFormatNumber(num) {
+            // 先转成字符串，处理小数
+            let numStr = num.toString();
+            
+            // 如果有小数点
+            if (numStr.includes('.')) {
+                // 去掉末尾的0
+                numStr = numStr.replace(/0+$/, '');
+                // 如果最后是小数点，也去掉
+                numStr = numStr.replace(/\.$/, '');
+            }
+            
+            return numStr;
+        }
+
+        // 格式化数字为合适的显示格式（用于分组明细）
+        function formatNumberForDisplay(num) {
+            // 先保留两位小数，再智能格式化
+            const withTwoDecimals = num.toFixed(2);
+            return smartFormatNumber(parseFloat(withTwoDecimals));
+        }
+
+        // 主计算函数
+        function calculate() {
+            const inputText = numberInput.value.trim();
+            
+            if (!inputText) {
+                showError('请输入数字内容');
+                return;
+            }
+
+            // 找到所有的"各"或"各数"和对应的数字
+            const geNumbers = findGeAndNumbers(inputText);
+            
+            if (geNumbers.length === 0) {
+                showError('未找到"各"或"各数"');
+                return;
+            }
+
+            // 检查是否有无效的匹配项（后面没有找到数字）
+            const invalidGe = geNumbers.find(ge => isNaN(ge.number));
+            if (invalidGe) {
+                showError(`第${geNumbers.indexOf(invalidGe) + 1}个"${invalidGe.geText}"后面没有找到有效数字`);
+                return;
+            }
+
+            // 解析整个文本中的所有数字
+            const allNumbers = parseNumbers(inputText);
+            
+            if (allNumbers.length === 0) {
+                showError('未找到有效数字');
+                return;
+            }
+
+            // 构建分组：每个"各"或"各数"之前的所有数算作一组数
+            const groups = [];
+            
+            // 遍历所有匹配项，每组都是当前匹配项之前的所有数
+            for (let i = 0; i < geNumbers.length; i++) {
+                const currentGe = geNumbers[i];
+                
+                // 确定当前组的起始和结束位置
+                let groupStartPosition;
+                if (i === 0) {
+                    groupStartPosition = 0; // 第一组的起始位置是文本开头
+                } else {
+                    const previousGe = geNumbers[i - 1];
+                    groupStartPosition = previousGe.position + previousGe.length; // 从前一个匹配项后开始
+                }
+                
+                const groupEndPosition = currentGe.position; // 到当前匹配项前结束
+                
+                // 提取当前组范围内的文本
+                const groupText = inputText.substring(groupStartPosition, groupEndPosition);
+                
+                // 解析这个范围内的所有数字
+                const groupNumbers = parseNumbers(groupText);
+                
+                if (groupNumbers.length > 0) {
+                    // 获取乘数：当前匹配项后面的第一个数（已转换为阿拉伯数字）
+                    const multiplier = currentGe.number;
+                    
+                    let displayCount;
+                    let calculation;
+                    let total;
+                    
+                    // 核心规则：第一组用个数直接乘，其他组用个数-1乘
+                    if (i === 0) {
+                        // 第1组：个数直接相乘
+                        displayCount = groupNumbers.length;
+                        total = displayCount * multiplier; // 原始值用于总金额计算
+                        // 显示时智能格式化（保留两位小数后去掉末尾0）
+                        const formattedMultiplier = formatNumberForDisplay(multiplier);
+                        const formattedTotal = formatNumberForDisplay(total);
+                        calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
+                    } else {
+                        // 其他组：个数-1相乘
+                        displayCount = Math.max(0, groupNumbers.length - 1);
+                        total = displayCount * multiplier; // 原始值用于总金额计算
+                        // 显示时智能格式化（保留两位小数后去掉末尾0）
+                        const formattedMultiplier = formatNumberForDisplay(multiplier);
+                        const formattedTotal = formatNumberForDisplay(total);
+                        calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
+                    }
+                    
+                    groups.push({
+                        numbers: groupNumbers,
+                        displayCount: displayCount,
+                        multiplier: multiplier,
+                        total: total, // 原始值，不保留小数
+                        calculation: calculation
+                    });
+                }
+            }
+
+            if (groups.length === 0) {
+                showError('无法形成有效的分组，请检查输入格式');
+                return;
+            }
+
+            // 备份当前状态
+            backupCurrentState();
+            
+            // 显示分组结果
+            displayResults(groups);
+            
+            // 计算并显示总金额（使用原始值计算，显示时智能格式化）
+            const totalAmount = groups.reduce((sum, group) => sum + group.total, 0);
+            displayTotal(totalAmount);
+        }
+
+        // 备份当前状态
+        function backupCurrentState() {
+            const currentState = {
+                inputValue: numberInput.value,
+                resultSectionDisplay: document.getElementById('resultSection').style.display,
+                emptyStateDisplay: emptyState.style.display,
+                totalAmount: document.getElementById('totalAmount').textContent,
+                groupResults: document.getElementById('groupResults').innerHTML,
+                isExpanded: isExpanded
+            };
+            
+            backupDataStack.push(currentState);
+            undoBtn.disabled = false;
+        }
+
+        // 显示分组结果
+        function displayResults(groups) {
+            const resultSection = document.getElementById('resultSection');
+            const groupResults = document.getElementById('groupResults');
+            const emptyStateEl = document.getElementById('emptyState');
+            
+            groupResults.innerHTML = '';
+            
+            groups.forEach((group, index) => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                
+                const groupLabel = document.createElement('span');
+                groupLabel.className = 'result-group';
+                groupLabel.textContent = `第${index + 1}组：`;
+                
+                const calculation = document.createElement('span');
+                calculation.className = 'result-calculation';
+                calculation.textContent = group.calculation;
+                
+                resultItem.appendChild(groupLabel);
+                resultItem.appendChild(calculation);
+                groupResults.appendChild(resultItem);
+            });
+            
+            resultSection.style.display = 'block';
+            emptyStateEl.style.display = 'none';
+        }
+
+        // 显示总金额（智能格式化）
+        function displayTotal(total) {
+            const totalAmount = document.getElementById('totalAmount');
+            // 显示时智能格式化，计算时使用原始值
+            totalAmount.textContent = `¥${smartFormatNumber(total)}`;
+        }
+
+        // 清除所有内容
+        function clearAll() {
+            const currentValue = numberInput.value.trim();
+            
+            if (!currentValue && document.getElementById('resultSection').style.display === 'none') {
+                return;
+            }
+            
+            backupCurrentState();
+            
+            numberInput.value = '';
+            numberInput.style.height = 'auto';
+            isExpanded = false;
+            numberInput.classList.remove('expanded');
+            expandCollapseBtn.classList.remove('expanded');
+            btnText.textContent = '展开输入框';
+            btnIcon.textContent = '▼';
+            
+            document.getElementById('resultSection').style.display = 'none';
+            emptyState.style.display = 'block';
+            document.getElementById('totalAmount').textContent = '¥0';
+            
+            numberInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 撤回清除操作
+        function undoClear() {
+            if (backupDataStack.length === 0) {
+                return;
+            }
+            
+            const lastState = backupDataStack.pop();
+            
+            numberInput.value = lastState.inputValue;
+            numberInput.style.height = 'auto';
+            
+            // 恢复展开状态
+            isExpanded = lastState.isExpanded;
+            numberInput.classList.toggle('expanded', isExpanded);
+            expandCollapseBtn.classList.toggle('expanded', isExpanded);
+            
+            // 恢复按钮文本和图标
+            if (isExpanded) {
+                btnText.textContent = '收起输入框';
+                btnIcon.textContent = '▲';
+            } else {
+                btnText.textContent = '展开输入框';
+                btnIcon.textContent = '▼';
+            }
+            
+            // 恢复高度
+            const maxHeight = isExpanded ? 400 : 180;
+            numberInput.style.height = Math.min(numberInput.scrollHeight, maxHeight) + 'px';
+            
+            document.getElementById('resultSection').style.display = lastState.resultSectionDisplay;
+            emptyState.style.display = lastState.emptyStateDisplay;
+            document.getElementById('totalAmount').textContent = lastState.totalAmount;
+            document.getElementById('groupResults').innerHTML = lastState.groupResults;
+            
+            if (backupDataStack.length === 0) {
+                undoBtn.disabled = true;
+            }
+            
+            numberInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 页面加载完成后设置默认焦点
+        window.addEventListener('load', function() {
+            numberInput.focus();
+        });
+    </script>
+</body>
+</html>
