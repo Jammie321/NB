@@ -283,7 +283,7 @@
                 <textarea 
                     id="numberInput" 
                     class="number-input" 
-                    placeholder="请输入数字，每组各字前的数排除第一个：&#10;例如：100，200，300各50 400，500各18"
+                    placeholder="请输入数字或生肖，每组各字前的数排除第一个：&#10;例如1：100，200，300各50 400，500各18&#10;例如2：鼠，牛，虎各10 兔，龙各20"
                     inputmode="numeric"
                 ></textarea>
             </div>
@@ -372,9 +372,28 @@
         const validChineseNumberChars = '零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇';
         const validChineseNumberSet = new Set(validChineseNumberChars.split(''));
         
+        // 定义生肖集合
+        const zodiacSet = new Set(['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']);
+        
         // 检查字符是否为有效的汉字数字
         function isValidChineseNumberChar(char) {
             return validChineseNumberSet.has(char);
+        }
+
+        // 检查字符是否为生肖
+        function isZodiacChar(char) {
+            return zodiacSet.has(char);
+        }
+
+        // 提取文本中的生肖列表
+        function extractZodiacs(text) {
+            const zodiacs = [];
+            for (let char of text) {
+                if (isZodiacChar(char)) {
+                    zodiacs.push(char);
+                }
+            }
+            return zodiacs;
         }
 
         // 汉字数字转阿拉伯数字的映射表
@@ -648,20 +667,15 @@
                 return;
             }
 
-            // 解析整个文本中的所有数字
-            const allNumbers = parseNumbers(inputText);
+            // 备份当前状态
+            backupCurrentState();
             
-            if (allNumbers.length === 0) {
-                showError('未找到有效数字');
-                return;
-            }
-
-            // 构建分组：每个"各"或"各数"之前的所有数算作一组数
+            // 构建分组：每个"各"或"各数"之前的所有数/生肖算作一组
             const groups = [];
             // 记录上一组乘数是否为小数（影响下一组计算逻辑）
             let prevIsDecimal = false;
             
-            // 遍历所有匹配项，每组都是当前匹配项之前的所有数
+            // 遍历所有匹配项，每组都是当前匹配项之前的所有内容
             for (let i = 0; i < geNumbers.length; i++) {
                 const currentGe = geNumbers[i];
                 
@@ -681,50 +695,57 @@
                 
                 // 解析这个范围内的所有数字
                 const groupNumbers = parseNumbers(groupText);
+                // 提取这个范围内的所有生肖
+                const groupZodiacs = extractZodiacs(groupText);
                 
-                if (groupNumbers.length > 0) {
-                    // 获取乘数：当前匹配项后面的第一个数（已转换为阿拉伯数字）
-                    const multiplier = currentGe.number;
-                    
-                    let displayCount;
-                    let calculation;
-                    let total;
-                    
-                    // 核心计算逻辑：
-                    // 第 1 组：组内数字的个数 × 乘数
-                    // 第 2 组及以后：根据上一组乘数是否为小数决定减1或减2，直接显示计算后的值
+                let displayCount;
+                let calculation;
+                let total;
+                const multiplier = currentGe.number;
+                
+                // 判断当前组是数字组还是生肖组（优先识别生肖组）
+                if (groupZodiacs.length > 0) {
+                    // 生肖组：生肖个数 × 乘数
+                    displayCount = groupZodiacs.length;
+                    total = displayCount * multiplier;
+                    const formattedMultiplier = formatNumberForDisplay(multiplier);
+                    const formattedTotal = formatNumberForDisplay(total);
+                    calculation = `${displayCount}个生肖 × ${formattedMultiplier} = ${formattedTotal}`;
+                } else if (groupNumbers.length > 0) {
+                    // 数字组：原有逻辑
                     if (i === 0) {
                         // 第1组：个数直接相乘
                         displayCount = groupNumbers.length;
-                        total = displayCount * multiplier; // 原始值用于总金额计算
-                        // 显示时智能格式化
+                        total = displayCount * multiplier;
                         const formattedMultiplier = formatNumberForDisplay(multiplier);
                         const formattedTotal = formatNumberForDisplay(total);
                         calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
                     } else {
-                        // 第2组及以后：根据上一组乘数类型决定减1或减2，直接显示结果值
+                        // 第2组及以后：根据上一组乘数类型决定减1或减2
                         const subtractNum = prevIsDecimal ? 2 : 1;
                         displayCount = groupNumbers.length - subtractNum;
-                        // 确保不会出现负数
                         displayCount = Math.max(0, displayCount);
-                        total = displayCount * multiplier; // 原始值用于总金额计算
-                        // 显示时直接用计算后的count（如3-2=1，显示1）
+                        total = displayCount * multiplier;
                         const formattedMultiplier = formatNumberForDisplay(multiplier);
                         const formattedTotal = formatNumberForDisplay(total);
                         calculation = `${displayCount}个数 × ${formattedMultiplier} = ${formattedTotal}`;
                     }
-                    
-                    groups.push({
-                        numbers: groupNumbers,
-                        displayCount: displayCount,
-                        multiplier: multiplier,
-                        total: total, // 原始值
-                        calculation: calculation
-                    });
-                    
-                    // 记录当前组乘数是否为小数，供下一组判断
-                    prevIsDecimal = isDecimal(multiplier);
+                } else {
+                    // 无有效内容，跳过该组
+                    continue;
                 }
+                
+                groups.push({
+                    numbers: groupNumbers,
+                    zodiacs: groupZodiacs,
+                    displayCount: displayCount,
+                    multiplier: multiplier,
+                    total: total, // 原始值
+                    calculation: calculation
+                });
+                
+                // 记录当前组乘数是否为小数，供下一组判断
+                prevIsDecimal = isDecimal(multiplier);
             }
 
             if (groups.length === 0) {
@@ -732,9 +753,6 @@
                 return;
             }
 
-            // 备份当前状态
-            backupCurrentState();
-            
             // 显示分组结果
             displayResults(groups);
             
