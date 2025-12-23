@@ -368,6 +368,15 @@
             numberInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
+        // 定义有效的数字汉字集合
+        const validChineseNumberChars = '零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇';
+        const validChineseNumberSet = new Set(validChineseNumberChars.split(''));
+        
+        // 检查字符是否为有效的汉字数字
+        function isValidChineseNumberChar(char) {
+            return validChineseNumberSet.has(char);
+        }
+
         // 汉字数字转阿拉伯数字的映射表
         const chineseNumMap = {
             '零': 0, '〇': 0,
@@ -390,6 +399,13 @@
         // 解析汉字数字为阿拉伯数字
         function parseChineseNumber(chineseStr) {
             if (!chineseStr || chineseStr.length === 0) return NaN;
+            
+            // 检查是否包含非数字汉字
+            for (let char of chineseStr) {
+                if (!isValidChineseNumberChar(char)) {
+                    return NaN;
+                }
+            }
             
             // 处理特殊情况：十、二十、三十等
             const specialCases = /^([零一二三四五六七八九两]*)十([零一二三四五六七八九两]*)$/;
@@ -453,28 +469,52 @@
                 return parseFloat(arabicMatch[0]);
             }
             
-            // 匹配汉字数字
-            const chineseNumChars = /^[零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]+/;
-            const chineseMatch = subText.match(chineseNumChars);
+            // 匹配连续的有效汉字数字（跳过非数字汉字）
+            let chineseNumStr = '';
+            for (let i = 0; i < subText.length; i++) {
+                const char = subText[i];
+                if (isValidChineseNumberChar(char)) {
+                    chineseNumStr += char;
+                } else {
+                    break; // 遇到非数字汉字立即停止
+                }
+            }
             
-            if (chineseMatch) {
-                const chineseNum = parseChineseNumber(chineseMatch[0]);
+            if (chineseNumStr.length > 0) {
+                const chineseNum = parseChineseNumber(chineseNumStr);
                 return isNaN(chineseNum) ? NaN : chineseNum;
             }
             
             return NaN;
         }
 
-        // 解析数字（支持阿拉伯数字和汉字数字）
+        // 解析数字（支持阿拉伯数字和有效汉字数字，其他汉字作为分隔符）
         function parseNumbers(text) {
+            // 首先将所有非数字、非有效汉字数字的字符替换为分隔符
+            let normalizedText = '';
+            for (let char of text) {
+                // 保留：数字、小数点、有效汉字数字、"各"、"各数"（用于后续处理）
+                if (/[\d.]/.test(char) || isValidChineseNumberChar(char) || char === '各') {
+                    normalizedText += char;
+                } else {
+                    normalizedText += ','; // 替换为逗号作为分隔符
+                }
+            }
+            
+            // 使用分隔符分割文本
             const separators = /[,，.。、\s\?\!\+\-\"';\:\/\\\(\)\[\]\{\}\<\>《》#@￥…&a-zA-Z]+/g;
-            const parts = text.split(separators)
+            const parts = normalizedText.split(separators)
                       .map(s => s.trim())
                       .filter(s => s.length > 0);
             
             const numbers = [];
             
             parts.forEach(part => {
+                // 跳过包含"各"的部分（这是关键字，不是数字）
+                if (part.includes('各')) {
+                    return;
+                }
+                
                 // 先尝试解析为阿拉伯数字
                 const arabicNum = parseFloat(part);
                 if (!isNaN(arabicNum) && arabicNum >= 0) {
@@ -482,20 +522,25 @@
                     return;
                 }
                 
-                // 再尝试解析为汉字数字
-                const chineseNum = parseChineseNumber(part);
-                if (!isNaN(chineseNum) && chineseNum >= 0) {
-                    numbers.push(chineseNum);
+                // 再尝试解析为有效汉字数字
+                // 检查是否全部由有效汉字数字组成
+                let isAllValidChineseNum = true;
+                for (let char of part) {
+                    if (!isValidChineseNumberChar(char)) {
+                        isAllValidChineseNum = false;
+                        break;
+                    }
+                }
+                
+                if (isAllValidChineseNum) {
+                    const chineseNum = parseChineseNumber(part);
+                    if (!isNaN(chineseNum) && chineseNum >= 0) {
+                        numbers.push(chineseNum);
+                    }
                 }
             });
             
             return numbers;
-        }
-
-        // 检查字符串是否为汉字数字
-        function isChineseNumber(str) {
-            const chineseNumChars = /^[零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]+$/;
-            return chineseNumChars.test(str);
         }
 
         // 查找所有"各"或"各数"及其后的数字
