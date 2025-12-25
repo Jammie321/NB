@@ -347,7 +347,7 @@
                 <textarea 
                     id="numberInput" 
                     class="number-input" 
-                    placeholder="请输入数字或生肖，每组支持各/各数/各个数：&#10;例如1：100，200，300各50 400，500各数18 鼠牛虎各个数10&#10;例如2（多少组模式）：各组三十八 鼠|牛|虎 每组一百二十三 龙、馬、蛇"
+                    placeholder="请输入数字或生肖，每组支持各/各数/各个数：&#10;例如1：100，200，300各50 400，500各数18 鼠牛虎各个数10&#10;例如2（多少组模式）：各组三十八 鼠|牛|虎 每组一百二十三 龙、馬、蛇 各组数五个，鼠+牛，虎-兔，各组三，龙中蛇，马1羊，各十，猴&鸡，狗9猪"
                     inputmode="numeric"
                 ></textarea>
             </div>
@@ -409,12 +409,342 @@
         let isOneZodiacFourNumbersMode = false;
         let isDuoshaoZuMode = false;
         
-        // ===================== 多少组模式核心计算逻辑（支持三位数汉字数字） =====================
+        // ===================== 多少组模式增强版核心计算逻辑 =====================
         const zodiacs = ['鼠', '牛', '虎', '兔', '龙', '龍', '蛇', '马', '馬', '羊', '猴', '鸡', '雞', '狗', '猪', '豬'];
         const keywords = ['各个组', '各组数', '每组', '各组', '各'];
         const separator = ',';
 
-        // 汉字数字映射
+        // 汉字数字映射（多少组模式专用）
+        const chineseNumMap_DuoshaoZu = {
+            '零': 0, '〇': 0,
+            '一': 1, '壹': 1,
+            '二': 2, '贰': 2, '两': 2, '兩': 2,
+            '三': 3, '叁': 3,
+            '四': 4, '肆': 4,
+            '五': 5, '伍': 5,
+            '六': 6, '陆': 6, '陸': 6,
+            '七': 7, '柒': 7,
+            '八': 8, '捌': 8,
+            '九': 9, '玖': 9,
+            '十': 10, '拾': 10,
+            '百': 100, '佰': 100,
+            '千': 1000, '仟': 1000,
+            '万': 10000, '萬': 10000
+        };
+        const chineseNumChars_DuoshaoZu = Object.keys(chineseNumMap_DuoshaoZu);
+        
+        // 通用正则转义
+        const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        /**
+         * 增强版：解析三位数以内汉字数字（多少组模式专用）
+         */
+        function parseChineseNum_DuoshaoZu(chineseNumStr) {
+            if (!chineseNumStr || typeof chineseNumStr !== 'string') return 0;
+            
+            // 只保留汉字数字字符
+            const cleanStr = chineseNumStr.split('').filter(char => chineseNumChars_DuoshaoZu.includes(char)).join('');
+            if (!cleanStr) return 0;
+
+            // 处理单字（零/一/二...九）
+            if (cleanStr.length === 1) {
+                return chineseNumMap_DuoshaoZu[cleanStr] || 0;
+            }
+
+            let total = 0;
+            let currentUnit = 1; // 当前单位（个）
+            let lastNum = 0;     // 上一个数字
+            
+            // 倒序解析（从个位往高位解析，更易处理单位）
+            for (let i = cleanStr.length - 1; i >= 0; i--) {
+                const char = cleanStr[i];
+                const value = chineseNumMap_DuoshaoZu[char] || 0;
+
+                // 单位字符（十/百/千/万）
+                if (value >= 10) {
+                    currentUnit = value;
+                    // 处理 "十" 开头的情况（如 "十"=10、"十二"=12）
+                    if (i === 0 && char === '十') {
+                        total += 1 * currentUnit;
+                    }
+                } 
+                // 数字字符（零/一/二...九）
+                else {
+                    if (currentUnit > 1) {
+                        // 数字+单位（如 "三"+"百" = 300）
+                        total += value * currentUnit;
+                        currentUnit = 1; // 重置为个位
+                    } else {
+                        // 个位数字（如 "一百二十三" 的 "三"）
+                        total += value;
+                        lastNum = value;
+                    }
+                }
+            }
+
+            // 处理特殊情况：
+            // 1. 两百五 → 250（缺少十单位）
+            if (cleanStr.includes('百') && !cleanStr.includes('十') && total < 100) {
+                const baiIndex = cleanStr.indexOf('百');
+                const baiNum = chineseNumMap_DuoshaoZu[cleanStr[baiIndex - 1]] || 1;
+                const afterBai = cleanStr.substring(baiIndex + 1);
+                const afterNum = afterBai ? parseChineseNum_DuoshaoZu(afterBai) : 0;
+                total = baiNum * 100 + afterNum;
+            }
+
+            // 2. 确保结果不超过三位数（如需支持更大数可调整）
+            total = Math.min(total, 999);
+            
+            return total >= 0 ? total : 0;
+        }
+
+        /**
+         * 提取关键词+数字组合（含位置信息）
+         * 返回：[{keyword, num, startIndex, endIndex}]
+         */
+        function extractKeywordNums(input) {
+            const result = [];
+            const keywordPattern = keywords.map(escapeRegExp).join('|');
+            const chineseNumPattern = chineseNumChars_DuoshaoZu.map(escapeRegExp).join('');
+            // 匹配关键词 + 任意字符 + 数字（阿拉伯/汉字）
+            const keywordNumReg = new RegExp(`(${keywordPattern})([\\s\\S]*?)((\\d+)|([${chineseNumPattern}]+))`, 'g');
+            
+            let match;
+            while ((match = keywordNumReg.exec(input)) !== null) {
+                const keyword = match[1];
+                const numStr = match[3].trim();
+                let num = 0;
+                
+                if (/^\d+$/.test(numStr)) {
+                    num = Number(numStr);
+                } else {
+                    num = parseChineseNum_DuoshaoZu(numStr);
+                }
+                
+                result.push({
+                    keyword: keyword,
+                    num: num,
+                    startIndex: match.index,
+                    endIndex: match.index + match[0].length
+                });
+            }
+            return result;
+        }
+
+        /**
+         * 处理生肖字之间单个符号：替换为分隔符
+         */
+        function replaceZodiacSingleSymbol(text) {
+            const escapedZodiacs = zodiacs.map(escapeRegExp).join('');
+            const zodiacReg = new RegExp(`([${escapedZodiacs}])([^${escapedZodiacs}])([${escapedZodiacs}])`, 'g');
+            return text.replace(zodiacReg, `$1${separator}$3`);
+        }
+
+        /**
+         * 处理"中"字：数字+中+数字 替换中间的"中"为分隔符
+         */
+        function replaceZhongChar(text) {
+            const numPattern = `(\\d+|[${chineseNumChars_DuoshaoZu.map(escapeRegExp).join('')}]+)`;
+            const zhongReg = new RegExp(`${numPattern}(中)${numPattern}`, 'g');
+            return text.replace(zhongReg, `$1${separator}$3`);
+        }
+
+        /**
+         * 统计数字之间出现次数最多的符号，替换为"十"
+         */
+        function replaceMostFrequentSymbolBetweenNums(text) {
+            const symbolMap = {};
+            const numSymbolReg = /(\d)([^0-9])(\d)/g;
+            let match;
+
+            // 统计符号出现次数
+            while ((match = numSymbolReg.exec(text)) !== null) {
+                const symbol = match[2];
+                symbolMap[symbol] = (symbolMap[symbol] || 0) + 1;
+            }
+
+            // 找到出现次数最多的符号
+            let mostFreqSymbol = '';
+            let maxCount = 0;
+            Object.entries(symbolMap).forEach(([symbol, count]) => {
+                if (count > maxCount) {
+                    maxCount = count;
+                    mostFreqSymbol = symbol;
+                }
+            });
+
+            // 替换最多符号为"十"
+            if (mostFreqSymbol) {
+                const replaceReg = new RegExp(`(\\d)${escapeRegExp(mostFreqSymbol)}(\\d)`, 'g');
+                text = text.replace(replaceReg, '$1十$2');
+            }
+            return text;
+        }
+
+        /**
+         * 删除关键词到第一个数字之间的所有字符，仅保留关键词
+         */
+        function deleteKeywordToFirstNum(text) {
+            const keywordPattern = keywords.map(escapeRegExp).join('|');
+            const chineseNumPattern = chineseNumChars_DuoshaoZu.map(escapeRegExp).join('');
+            const deleteReg = new RegExp(
+                `(${keywordPattern})([\\s\\S]*?)((?:\\d+)|(?:[${chineseNumPattern}]+))\\s*`,
+                'g'
+            );
+            return text.replace(deleteReg, '$1');
+        }
+
+        /**
+         * 替换非指定字符为分隔符（仅保留关键词、数字、十、生肖字）
+         */
+        function replaceNonSpecifiedChars(text) {
+            // 构建允许的字符集合
+            const allowedChars = new Set();
+            
+            // 添加关键词字符
+            keywords.forEach(kw => kw.split('').forEach(c => allowedChars.add(c)));
+            // 添加数字字符
+            '0123456789'.split('').forEach(c => allowedChars.add(c));
+            // 添加"十"
+            allowedChars.add('十');
+            // 添加生肖字符
+            zodiacs.forEach(z => allowedChars.add(z));
+
+            // 构建非允许字符正则
+            const allowedPattern = Array.from(allowedChars).map(escapeRegExp).join('');
+            const nonAllowedReg = new RegExp(`[^${allowedPattern}]`, 'g');
+            
+            return text.replace(nonAllowedReg, separator);
+        }
+
+        /**
+         * 合并连续多个分隔符为单个分隔符
+         */
+        function mergeConsecutiveSeparators(text) {
+            const mergeReg = new RegExp(`${escapeRegExp(separator)}+`, 'g');
+            return text.replace(mergeReg, separator);
+        }
+
+        /**
+         * 分割为二维列表（按关键词分割，再按分隔符分子列表）
+         */
+        function splitTo2DList(text) {
+            const keywordPattern = keywords.map(escapeRegExp).join('|');
+            // 按关键词分割并过滤空值
+            const mainParts = text.split(new RegExp(keywordPattern, 'g')).filter(part => part.trim() !== '');
+            
+            // 每个主部分按分隔符分割为子列表
+            return mainParts.map(part => {
+                return part.split(separator).filter(item => item.trim() !== '');
+            }).filter(list => list.length > 0); // 过滤空列表
+        }
+
+        /**
+         * 主处理函数：整合所有逻辑
+         */
+        function processText(inputText) {
+            let processed = inputText;
+
+            // 步骤1：提取关键词对应的数字列表
+            const keywordNums = extractKeywordNums(inputText);
+            const numList = keywordNums.map(item => item.num);
+
+            // 步骤2：处理生肖字间单个符号
+            processed = replaceZodiacSingleSymbol(processed);
+
+            // 步骤3：处理"中"字
+            processed = replaceZhongChar(processed);
+
+            // 步骤4：替换数字间最多符号为"十"
+            processed = replaceMostFrequentSymbolBetweenNums(processed);
+
+            // 步骤5：删除关键词到第一个数字间的内容
+            processed = deleteKeywordToFirstNum(processed);
+
+            // 步骤6：替换非指定字符为分隔符
+            processed = replaceNonSpecifiedChars(processed);
+
+            // 步骤7：合并连续分隔符
+            processed = mergeConsecutiveSeparators(processed);
+
+            // 步骤8：分割为二维列表
+            const twoDList = splitTo2DList(processed);
+
+            return { twoDList, numList };
+        }
+
+        /**
+         * 多少组模式核心计算函数（整合第二个代码逻辑）
+         */
+        function calculateDuoshaoZu(input) {
+            if (!input) {
+                showError('请输入内容！');
+                return null;
+            }
+
+            try {
+                // 使用增强版处理逻辑
+                const { twoDList, numList } = processText(input);
+                
+                if (twoDList.length === 0) {
+                    showError('未找到有效的分组内容！');
+                    return { groups: [], total: 0 };
+                }
+
+                // 计算每个分组的金额
+                let totalAmount = 0;
+                const groups = [];
+
+                twoDList.forEach((list, idx) => {
+                    const subListCount = list.length;
+                    const num = numList[idx] || 0;
+                    const result = subListCount * num;
+                    totalAmount += result;
+
+                    // 按新格式生成计算描述：第n项：6组×40=240
+                    const formattedCount = smartFormatNumber(subListCount);
+                    const formattedNum = smartFormatNumber(num);
+                    const formattedResult = smartFormatNumber(result);
+                    
+                    groups.push({
+                        displayCount: subListCount,
+                        multiplier: num,
+                        total: result,
+                        calculation: `${formattedCount}组×${formattedNum}=${formattedResult}`,
+                        rawContent: list.join(',')
+                    });
+                });
+
+                // 补充数字列表长度不足的情况
+                if (numList.length < twoDList.length) {
+                    for (let i = numList.length; i < twoDList.length; i++) {
+                        const subListCount = twoDList[i].length;
+                        const result = subListCount * 0;
+                        const formattedCount = smartFormatNumber(subListCount);
+                        
+                        groups.push({
+                            displayCount: subListCount,
+                            multiplier: 0,
+                            total: result,
+                            calculation: `${formattedCount}组×0=0`,
+                            rawContent: twoDList[i].join(',')
+                        });
+                    }
+                }
+
+                return {
+                    groups: groups,
+                    total: totalAmount
+                };
+            } catch (e) {
+                showError(`计算出错：${e.message}`);
+                console.error('多少组计算错误：', e);
+                return null;
+            }
+        }
+
+        // ===================== 通用增强版汉字数字解析（非多少组模式使用） =====================
+        // 增强版汉字数字映射
         const chineseNumMap = {
             '零': 0, '〇': 0,
             '一': 1, '壹': 1,
@@ -432,9 +762,17 @@
             '万': 10000, '萬': 10000
         };
         const chineseNumChars = Object.keys(chineseNumMap);
+        const validChineseNumberSet = new Set(chineseNumChars);
         
-        // 通用正则转义
-        const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const zodiacSet = new Set(['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']);
+        const excludeHorseWords = ['特马', '平马', '马数'];
+        
+        /**
+         * 验证是否为有效汉字数字字符
+         */
+        function isValidChineseNumberChar(char) {
+            return validChineseNumberSet.has(char);
+        }
 
         /**
          * 增强版：解析三位数以内汉字数字（支持一百二十三、三百零五、五百二十、九十、十二等）
@@ -499,137 +837,251 @@
         }
 
         /**
-         * 提取关键词+数字组合（含位置信息）
-         * 返回：[{keyword, num, startIndex, endIndex}]
+         * 提取文本中的生肖（排除特马/平马/马数等词汇）
          */
-        function extractKeywordNums(input) {
-            const result = [];
-            const keywordPattern = keywords.map(escapeRegExp).join('|');
-            const chineseNumPattern = chineseNumChars.map(escapeRegExp).join('');
-            // 匹配关键词 + 任意字符 + 数字（阿拉伯/汉字）
-            const keywordNumReg = new RegExp(`(${keywordPattern})([\\s\\S]*?)((\\d+)|([${chineseNumPattern}]+))`, 'g');
+        function extractZodiacs(text) {
+            let processedText = text;
             
-            let match;
-            while ((match = keywordNumReg.exec(input)) !== null) {
-                const keyword = match[1];
-                const numStr = match[3].trim();
-                let num = 0;
-                
-                if (/^\d+$/.test(numStr)) {
-                    num = Number(numStr);
-                } else {
-                    num = parseChineseNum(numStr);
+            excludeHorseWords.forEach(word => {
+                const regex = new RegExp(word, 'g');
+                processedText = processedText.replace(regex, '');
+            });
+            
+            const zodiacSet = new Set();
+            for (let char of processedText) {
+                if (isZodiacChar(char)) {
+                    zodiacSet.add(char);
                 }
-                
-                result.push({
-                    keyword: keyword,
-                    num: num,
-                    startIndex: match.index,
-                    endIndex: match.index + match[0].length
-                });
             }
-            return result;
+            
+            return Array.from(zodiacSet);
         }
 
         /**
-         * 智能处理内容块分隔符（区分数字块/生肖块）
+         * 验证是否为生肖字符
          */
-        function processBlockContent(block) {
-            if (!block) return '';
-            const escapedZodiacs = zodiacs.map(escapeRegExp).join('');
-
-            // 1. 替换所有空白字符（换行/空格/制表符）为统一分隔符
-            let processed = block.replace(/\s+/g, separator);
-
-            // 2. 生肖块专属：生肖之间的任意非生肖字符替换为分隔符
-            const zodiacSepReg = new RegExp(`([${escapedZodiacs}])[^${escapedZodiacs}]+([${escapedZodiacs}])`, 'g');
-            processed = processed.replace(zodiacSepReg, `$1${separator}$2`);
-
-            // 3. 数字块专属：数字组合间的中文标点替换为分隔符
-            const numSepReg = new RegExp(`(\\d+\\.\\d+\\.\\d+)([。；！？，])`, 'g');
-            processed = processed.replace(numSepReg, `$1${separator}`);
-
-            // 4. 统一替换非数字/非生肖/非点的符号为分隔符
-            const nonWordReg = new RegExp(`[^\\d${escapedZodiacs}\\.${escapeRegExp(separator)}]`, 'g');
-            processed = processed.replace(nonWordReg, separator);
-
-            // 5. 合并连续分隔符 + 去除首尾分隔符
-            processed = processed.replace(new RegExp(`${escapeRegExp(separator)}+`, 'g'), separator);
-            processed = processed.replace(new RegExp(`^${escapeRegExp(separator)}|${escapeRegExp(separator)}$`, 'g'), '');
-
-            return processed;
+        function isZodiacChar(char) {
+            return zodiacSet.has(char);
         }
 
-        function calculateDuoshaoZu(input) {
-            if (!input) {
-                showError('请输入内容！');
-                return null;
+        /**
+         * 提取"各"后面的数字（支持阿拉伯数字和汉字数字）
+         */
+        function extractNumberAfterGe(text, startIndex) {
+            const subText = text.substring(startIndex).trim();
+            
+            // 先匹配阿拉伯数字
+            const arabicMatch = subText.match(/^\d+(\.\d+)?/);
+            if (arabicMatch) {
+                return parseFloat(arabicMatch[0]);
             }
-
-            try {
-                // 1. 提取所有关键词+数字组合（含位置）
-                const keywordNumList = extractKeywordNums(input);
-                if (keywordNumList.length === 0) {
-                    showError('未找到有效的关键词和数字组合！');
-                    return { groups: [], total: 0 };
+            
+            // 匹配汉字数字
+            let chineseNumStr = '';
+            for (let i = 0; i < subText.length; i++) {
+                const char = subText[i];
+                if (isValidChineseNumberChar(char)) {
+                    chineseNumStr += char;
+                } else {
+                    break;
                 }
+            }
+            
+            if (chineseNumStr.length > 0) {
+                const chineseNum = parseChineseNum(chineseNumStr);
+                return chineseNum === 0 ? NaN : chineseNum;
+            }
+            
+            return NaN;
+        }
 
-                // 2. 按关键词位置分割内容块（每个关键词对应其前面的内容）
-                const contentBlocks = [];
-                // 第一个内容块：开头 → 第一个关键词起始位置
-                contentBlocks.push(input.substring(0, keywordNumList[0].startIndex).trim());
-                // 后续内容块：前一个关键词结束位置 → 当前关键词起始位置
-                for (let i = 1; i < keywordNumList.length; i++) {
-                    contentBlocks.push(
-                        input.substring(keywordNumList[i-1].endIndex, keywordNumList[i].startIndex).trim()
-                    );
+        /**
+         * 解析文本中的数字（支持阿拉伯和汉字数字）
+         */
+        function parseNumbers(text) {
+            let normalizedText = '';
+            for (let char of text) {
+                if (/[\d.]/.test(char) || isValidChineseNumberChar(char) || char === '各') {
+                    normalizedText += char;
+                } else {
+                    normalizedText += ',';
                 }
-
-                // 3. 计算每个分组的金额
-                let totalAmount = 0;
-                const groups = [];
-
-                contentBlocks.forEach((block, idx) => {
-                    const num = keywordNumList[idx].num || 0;
-                    if (num === 0) {
-                        groups.push({
-                            displayCount: 0,
-                            multiplier: 0,
-                            total: 0,
-                            calculation: `第${idx + 1}组：无效数字`,
-                            rawContent: block
-                        });
-                        return;
+            }
+            
+            const separators = /[,，.。、\s\?\!\+\-\"';\:\/\\\(\)\[\]\{\}\<\>《》#@￥…&a-zA-Z]+/g;
+            const parts = normalizedText.split(separators)
+                      .map(s => s.trim())
+                      .filter(s => s.length > 0);
+            
+            const numbers = [];
+            
+            parts.forEach(part => {
+                if (part.includes('各')) {
+                    return;
+                }
+                
+                // 先尝试解析阿拉伯数字
+                const arabicNum = parseFloat(part);
+                if (!isNaN(arabicNum) && arabicNum >= 0) {
+                    numbers.push(arabicNum);
+                    return;
+                }
+                
+                // 检查是否全为有效汉字数字
+                let isAllValidChineseNum = true;
+                for (let char of part) {
+                    if (!isValidChineseNumberChar(char)) {
+                        isAllValidChineseNum = false;
+                        break;
                     }
-
-                    // 处理内容块，统计有效小组数
-                    const processedBlock = processBlockContent(block);
-                    const validGroups = processedBlock.split(separator).filter(item => item.trim() !== '');
-                    const groupCount = validGroups.length;
-                    const groupAmount = groupCount * num;
-                    totalAmount += groupAmount;
-
-                    groups.push({
-                        displayCount: groupCount,
-                        multiplier: num,
-                        total: groupAmount,
-                        calculation: `${groupCount} × ${smartFormatNumber(num)} = ${smartFormatNumber(groupAmount)}`,
-                        rawContent: block
-                    });
-                });
-
-                return {
-                    groups: groups,
-                    total: totalAmount
-                };
-            } catch (e) {
-                showError(`计算出错：${e.message}`);
-                console.error('多少组计算错误：', e);
-                return null;
-            }
+                }
+                
+                // 解析汉字数字
+                if (isAllValidChineseNum) {
+                    const chineseNum = parseChineseNum(part);
+                    if (chineseNum > 0) {
+                        numbers.push(chineseNum);
+                    }
+                }
+            });
+            
+            return numbers;
         }
 
-        // ===================== 原有逻辑 =====================
+        /**
+         * 查找所有数字及其位置（支持阿拉伯和汉字数字）
+         */
+        function extractAllNumbersWithPosition(text) {
+            const numberPositions = [];
+            
+            // 匹配阿拉伯数字
+            const arabicRegex = /\d+(\.\d+)?/g;
+            let arabicMatch;
+            while ((arabicMatch = arabicRegex.exec(text)) !== null) {
+                numberPositions.push({
+                    value: parseFloat(arabicMatch[0]),
+                    start: arabicMatch.index,
+                    end: arabicMatch.index + arabicMatch[0].length
+                });
+            }
+            
+            // 处理汉字数字（先把阿拉伯数字位置替换为空格，避免重复匹配）
+            let chineseText = text;
+            numberPositions.forEach(pos => {
+                chineseText = chineseText.substring(0, pos.start) + 
+                              ' '.repeat(pos.end - pos.start) + 
+                              chineseText.substring(pos.end);
+            });
+            
+            // 匹配汉字数字
+            const chineseRegex = /[零一二三四五六七八九十百千万两壹贰叁肆伍陆柒捌玖拾佰仟萬〇]+/g;
+            let chineseMatch;
+            while ((chineseMatch = chineseRegex.exec(chineseText)) !== null) {
+                const chineseNum = parseChineseNum(chineseMatch[0]);
+                if (chineseNum > 0) {
+                    numberPositions.push({
+                        value: chineseNum,
+                        start: chineseMatch.index,
+                        end: chineseMatch.index + chineseMatch[0].length
+                    });
+                }
+            }
+            
+            // 按位置排序
+            numberPositions.sort((a, b) => a.start - b.start);
+            
+            return numberPositions;
+        }
+
+        /**
+         * 查找"各/各数/各个数"及其后面的数字
+         */
+        function findGeAndNumbers(text) {
+            const results = [];
+            const geRegex = /各个数|各数|各/g;
+            let match;
+            
+            while ((match = geRegex.exec(text)) !== null) {
+                const geText = match[0];
+                const offset = geText.length;
+                
+                const number = extractNumberAfterGe(text, match.index + offset);
+                const remainingText = text.substring(match.index + offset);
+                const firstNumberIndex = remainingText.search(/[0-9零一二三四五六七八九十百千万两壹贰叁肆伍陆柒捌玖拾佰仟萬〇]/);
+                
+                let beforeNumberText = '';
+                if (firstNumberIndex !== -1) {
+                    beforeNumberText = remainingText.substring(0, firstNumberIndex).trim();
+                }
+                
+                results.push({
+                    position: match.index,
+                    length: offset,
+                    number: number,
+                    beforeNumberText: beforeNumberText,
+                    geText: geText
+                });
+            }
+            
+            return results;
+        }
+
+        /**
+         * 一肖四数模式计算
+         */
+        function calculateOneZodiacFourNumbers(text) {
+            const numberPositions = extractAllNumbersWithPosition(text);
+            
+            if (numberPositions.length === 0) {
+                showError('未找到有效数字');
+                return null;
+            }
+            
+            const groups = [];
+            
+            for (let i = 0; i < numberPositions.length; i++) {
+                const numPos = numberPositions[i];
+                const currentNum = numPos.value;
+                
+                let zodiacTextStart = 0;
+                if (i > 0) {
+                    zodiacTextStart = numberPositions[i-1].end;
+                }
+                const zodiacTextEnd = numPos.start;
+                
+                const zodiacText = text.substring(zodiacTextStart, zodiacTextEnd).trim();
+                const zodiacs = extractZodiacs(zodiacText);
+                
+                if (zodiacs.length === 0) {
+                    continue;
+                }
+                
+                const zodiacCount = zodiacs.length;
+                const groupTotal = zodiacCount * 4 * currentNum;
+                
+                const formattedZodiacCount = formatNumberForDisplay(zodiacCount);
+                const formattedNum = formatNumberForDisplay(currentNum);
+                const formattedTotal = formatNumberForDisplay(groupTotal);
+                const calculation = `${formattedZodiacCount}个生肖 × 4 × ${formattedNum} = ${formattedTotal}`;
+                
+                groups.push({
+                    zodiacs: zodiacs,
+                    number: currentNum,
+                    displayCount: zodiacCount,
+                    total: groupTotal,
+                    calculation: calculation
+                });
+            }
+            
+            if (groups.length === 0) {
+                showError('未找到有效的生肖-数字组合');
+                return null;
+            }
+            
+            return groups;
+        }
+
+        // ===================== 通用工具函数 =====================
         numberInput.addEventListener('input', function() {
             this.style.height = 'auto';
             const maxHeight = isExpanded ? 400 : 180;
@@ -685,306 +1137,9 @@
             }
         });
 
-        const validChineseNumberChars = '零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇';
-        const validChineseNumberSet = new Set(validChineseNumberChars.split(''));
-        
-        const zodiacSet = new Set(['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']);
-        
-        const excludeHorseWords = ['特马', '平马', '马数'];
-        
-        function isValidChineseNumberChar(char) {
-            return validChineseNumberSet.has(char);
-        }
-
-        function isZodiacChar(char) {
-            return zodiacSet.has(char);
-        }
-
-        function extractZodiacs(text) {
-            let processedText = text;
-            
-            excludeHorseWords.forEach(word => {
-                const regex = new RegExp(word, 'g');
-                processedText = processedText.replace(regex, '');
-            });
-            
-            const zodiacSet = new Set();
-            for (let char of processedText) {
-                if (isZodiacChar(char)) {
-                    zodiacSet.add(char);
-                }
-            }
-            
-            return Array.from(zodiacSet);
-        }
-
-        const chineseNumMapOriginal = {
-            '零': 0, '〇': 0,
-            '一': 1, '壹': 1,
-            '二': 2, '贰': 2, '两': 2,
-            '三': 3, '叁': 3,
-            '四': 4, '肆': 4,
-            '五': 5, '伍': 5,
-            '六': 6, '陆': 6,
-            '七': 7, '柒': 7,
-            '八': 8, '捌': 8,
-            '九': 9, '玖': 9,
-            '十': 10, '拾': 10,
-            '百': 100, '佰': 100,
-            '千': 1000, '仟': 1000,
-            '万': 10000, '萬': 10000,
-            '亿': 100000000, '億': 100000000
-        };
-
-        function parseChineseNumber(chineseStr) {
-            if (!chineseStr || chineseStr.length === 0) return NaN;
-            
-            for (let char of chineseStr) {
-                if (!isValidChineseNumberChar(char)) {
-                    return NaN;
-                }
-            }
-            
-            const specialCases = /^([零一二三四五六七八九两]*)十([零一二三四五六七八九两]*)$/;
-            const match = chineseStr.match(specialCases);
-            
-            if (match) {
-                let tens = 0;
-                let units = 0;
-                
-                if (match[1]) tens = chineseNumMapOriginal[match[1]] || 0;
-                if (match[2]) units = chineseNumMapOriginal[match[2]] || 0;
-                
-                if (tens === 0 && match[1] === '' && match[2] === '') return 10;
-                if (tens === 0 && match[1] === '') tens = 1;
-                
-                return tens * 10 + units;
-            }
-            
-            if (chineseStr.length === 1) {
-                return chineseNumMapOriginal[chineseStr] || NaN;
-            }
-            
-            let result = 0;
-            let temp = 0;
-            
-            for (let i = 0; i < chineseStr.length; i++) {
-                const char = chineseStr[i];
-                const num = chineseNumMapOriginal[char];
-                
-                if (isNaN(num)) return NaN;
-                
-                if (num >= 10000) {
-                    result += temp * num;
-                    temp = 0;
-                } else if (num >= 1000) {
-                    temp += (temp === 0 ? 1 : 0) * num;
-                } else if (num >= 100) {
-                    temp += (temp === 0 ? 1 : 0) * num;
-                } else if (num >= 10) {
-                    temp += (temp === 0 ? 1 : 0) * num;
-                } else {
-                    temp += num;
-                }
-            }
-            
-            result += temp;
-            return result > 0 ? result : NaN;
-        }
-
-        function extractNumberAfterGe(text, startIndex) {
-            const subText = text.substring(startIndex).trim();
-            
-            const arabicMatch = subText.match(/^\d+(\.\d+)?/);
-            if (arabicMatch) {
-                return parseFloat(arabicMatch[0]);
-            }
-            
-            let chineseNumStr = '';
-            for (let i = 0; i < subText.length; i++) {
-                const char = subText[i];
-                if (isValidChineseNumberChar(char)) {
-                    chineseNumStr += char;
-                } else {
-                    break;
-                }
-            }
-            
-            if (chineseNumStr.length > 0) {
-                const chineseNum = parseChineseNumber(chineseNumStr);
-                return isNaN(chineseNum) ? NaN : chineseNum;
-            }
-            
-            return NaN;
-        }
-
-        function parseNumbers(text) {
-            let normalizedText = '';
-            for (let char of text) {
-                if (/[\d.]/.test(char) || isValidChineseNumberChar(char) || char === '各') {
-                    normalizedText += char;
-                } else {
-                    normalizedText += ',';
-                }
-            }
-            
-            const separators = /[,，.。、\s\?\!\+\-\"';\:\/\\\(\)\[\]\{\}\<\>《》#@￥…&a-zA-Z]+/g;
-            const parts = normalizedText.split(separators)
-                      .map(s => s.trim())
-                      .filter(s => s.length > 0);
-            
-            const numbers = [];
-            
-            parts.forEach(part => {
-                if (part.includes('各')) {
-                    return;
-                }
-                
-                const arabicNum = parseFloat(part);
-                if (!isNaN(arabicNum) && arabicNum >= 0) {
-                    numbers.push(arabicNum);
-                    return;
-                }
-                
-                let isAllValidChineseNum = true;
-                for (let char of part) {
-                    if (!isValidChineseNumberChar(char)) {
-                        isAllValidChineseNum = false;
-                        break;
-                    }
-                }
-                
-                if (isAllValidChineseNum) {
-                    const chineseNum = parseChineseNumber(part);
-                    if (!isNaN(chineseNum) && chineseNum >= 0) {
-                        numbers.push(chineseNum);
-                    }
-                }
-            });
-            
-            return numbers;
-        }
-
-        function findGeAndNumbers(text) {
-            const results = [];
-            const geRegex = /各个数|各数|各/g;
-            let match;
-            
-            while ((match = geRegex.exec(text)) !== null) {
-                const geText = match[0];
-                const offset = geText.length;
-                
-                const number = extractNumberAfterGe(text, match.index + offset);
-                const remainingText = text.substring(match.index + offset);
-                const firstNumberIndex = remainingText.search(/[0-9零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]/);
-                
-                let beforeNumberText = '';
-                if (firstNumberIndex !== -1) {
-                    beforeNumberText = remainingText.substring(0, firstNumberIndex).trim();
-                }
-                
-                results.push({
-                    position: match.index,
-                    length: offset,
-                    number: number,
-                    beforeNumberText: beforeNumberText,
-                    geText: geText
-                });
-            }
-            
-            return results;
-        }
-
-        function extractAllNumbersWithPosition(text) {
-            const numberPositions = [];
-            
-            const arabicRegex = /\d+(\.\d+)?/g;
-            let arabicMatch;
-            while ((arabicMatch = arabicRegex.exec(text)) !== null) {
-                numberPositions.push({
-                    value: parseFloat(arabicMatch[0]),
-                    start: arabicMatch.index,
-                    end: arabicMatch.index + arabicMatch[0].length
-                });
-            }
-            
-            let chineseText = text;
-            numberPositions.forEach(pos => {
-                chineseText = chineseText.substring(0, pos.start) + 
-                              ' '.repeat(pos.end - pos.start) + 
-                              chineseText.substring(pos.end);
-            });
-            
-            const chineseRegex = /[零一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億〇]+/g;
-            let chineseMatch;
-            while ((chineseMatch = chineseRegex.exec(chineseText)) !== null) {
-                const chineseNum = parseChineseNumber(chineseMatch[0]);
-                if (!isNaN(chineseNum) && chineseNum > 0) {
-                    numberPositions.push({
-                        value: chineseNum,
-                        start: chineseMatch.index,
-                        end: chineseMatch.index + chineseMatch[0].length
-                    });
-                }
-            }
-            
-            numberPositions.sort((a, b) => a.start - b.start);
-            
-            return numberPositions;
-        }
-
-        function calculateOneZodiacFourNumbers(text) {
-            const numberPositions = extractAllNumbersWithPosition(text);
-            
-            if (numberPositions.length === 0) {
-                showError('未找到有效数字');
-                return null;
-            }
-            
-            const groups = [];
-            
-            for (let i = 0; i < numberPositions.length; i++) {
-                const numPos = numberPositions[i];
-                const currentNum = numPos.value;
-                
-                let zodiacTextStart = 0;
-                if (i > 0) {
-                    zodiacTextStart = numberPositions[i-1].end;
-                }
-                const zodiacTextEnd = numPos.start;
-                
-                const zodiacText = text.substring(zodiacTextStart, zodiacTextEnd).trim();
-                const zodiacs = extractZodiacs(zodiacText);
-                
-                if (zodiacs.length === 0) {
-                    continue;
-                }
-                
-                const zodiacCount = zodiacs.length;
-                const groupTotal = zodiacCount * 4 * currentNum;
-                
-                const formattedZodiacCount = formatNumberForDisplay(zodiacCount);
-                const formattedNum = formatNumberForDisplay(currentNum);
-                const formattedTotal = formatNumberForDisplay(groupTotal);
-                const calculation = `${formattedZodiacCount}个生肖 × 4 × ${formattedNum} = ${formattedTotal}`;
-                
-                groups.push({
-                    zodiacs: zodiacs,
-                    number: currentNum,
-                    displayCount: zodiacCount,
-                    total: groupTotal,
-                    calculation: calculation
-                });
-            }
-            
-            if (groups.length === 0) {
-                showError('未找到有效的生肖-数字组合');
-                return null;
-            }
-            
-            return groups;
-        }
-
+        /**
+         * 显示错误提示
+         */
         function showError(message) {
             errorMessage.textContent = message;
             setTimeout(() => {
@@ -992,6 +1147,9 @@
             }, 3000);
         }
 
+        /**
+         * 智能格式化数字（去除末尾的0）
+         */
         function smartFormatNumber(num) {
             const fixedNum = parseFloat(num.toFixed(2));
             
@@ -1012,14 +1170,42 @@
             return numStr;
         }
 
+        /**
+         * 格式化数字用于显示
+         */
         function formatNumberForDisplay(num) {
             return smartFormatNumber(num);
         }
 
+        /**
+         * 检查是否为小数
+         */
         function isDecimal(num) {
             return !Number.isInteger(num) && !isNaN(num);
         }
 
+        /**
+         * 备份当前状态（用于撤回）
+         */
+        function backupCurrentState() {
+            const currentState = {
+                inputValue: numberInput.value,
+                resultSectionDisplay: document.getElementById('resultSection').style.display,
+                emptyStateDisplay: emptyState.style.display,
+                totalAmount: document.getElementById('totalAmount').textContent,
+                groupResults: document.getElementById('groupResults').innerHTML,
+                isExpanded: isExpanded,
+                isOneZodiacFourNumbersMode: isOneZodiacFourNumbersMode,
+                isDuoshaoZuMode: isDuoshaoZuMode
+            };
+            
+            backupDataStack.push(currentState);
+            undoBtn.disabled = false;
+        }
+
+        /**
+         * 核心计算函数
+         */
         function calculate() {
             const inputText = numberInput.value.trim();
             
@@ -1138,22 +1324,9 @@
             displayTotal(totalAmount);
         }
 
-        function backupCurrentState() {
-            const currentState = {
-                inputValue: numberInput.value,
-                resultSectionDisplay: document.getElementById('resultSection').style.display,
-                emptyStateDisplay: emptyState.style.display,
-                totalAmount: document.getElementById('totalAmount').textContent,
-                groupResults: document.getElementById('groupResults').innerHTML,
-                isExpanded: isExpanded,
-                isOneZodiacFourNumbersMode: isOneZodiacFourNumbersMode,
-                isDuoshaoZuMode: isDuoshaoZuMode
-            };
-            
-            backupDataStack.push(currentState);
-            undoBtn.disabled = false;
-        }
-
+        /**
+         * 显示计算结果
+         */
         function displayResults(groups) {
             const resultSection = document.getElementById('resultSection');
             const groupResults = document.getElementById('groupResults');
@@ -1182,11 +1355,17 @@
             emptyStateEl.style.display = 'none';
         }
 
+        /**
+         * 显示总金额
+         */
         function displayTotal(total) {
             const totalAmount = document.getElementById('totalAmount');
             totalAmount.textContent = `¥${smartFormatNumber(total)}`;
         }
 
+        /**
+         * 清除所有内容
+         */
         function clearAll() {
             const currentValue = numberInput.value.trim();
             
@@ -1217,6 +1396,9 @@
             numberInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
+        /**
+         * 撤回清除操作
+         */
         function undoClear() {
             if (backupDataStack.length === 0) {
                 return;
@@ -1260,6 +1442,7 @@
             numberInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
+        // 页面加载完成后聚焦输入框
         window.addEventListener('load', function() {
             numberInput.focus();
         });
