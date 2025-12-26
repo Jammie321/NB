@@ -329,6 +329,12 @@
             min-height: 20px;
         }
 
+        /* 新增：今年生肖标记样式 */
+        .this-year-zodiac {
+            color: #FFD700;
+            font-weight: bold;
+        }
+
         @media (max-width: 400px) {
             .one-zodiac-four-numbers-btn,
             .duoshao-zu-btn {
@@ -354,7 +360,7 @@
             
             <div class="function-button-row">
                 <button id="oneZodiacFourNumbersBtn" class="one-zodiac-four-numbers-btn">
-                    一肖四数
+                    一肖四五
                 </button>
                 <button id="duoshaoZuBtn" class="duoshao-zu-btn">
                     多少组
@@ -408,6 +414,35 @@
         let isExpanded = false;
         let isOneZodiacFourNumbersMode = false;
         let isDuoshaoZuMode = false;
+
+        // ===================== 新增：年份与生肖相关函数 =====================
+        // 生肖顺序（固定）
+        const zodiacOrder = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
+        // 获取今年年份
+        const currentYear = new Date().getFullYear();
+        // 计算今年的专属生肖（1900年是鼠年，公式：(年份 - 1900) % 12）
+        const thisYearZodiac = zodiacOrder[(currentYear - 1900) % 12];
+        console.log(`今年${currentYear}年的生肖是：${thisYearZodiac}`); // 控制台输出验证
+        
+        /**
+         * 计算生肖组合的总系数（今年生肖×5，其他×4）
+         * @param {Array} zodiacList 生肖列表
+         * @returns {Object} 包含总系数、今年生肖数量、其他生肖数量
+         */
+        function calculateZodiacCoefficient(zodiacList) {
+            // 统计今年生肖数量
+            const thisYearCount = zodiacList.filter(z => z === thisYearZodiac).length;
+            // 其他生肖数量
+            const otherCount = zodiacList.length - thisYearCount;
+            // 总系数：今年生肖×5 + 其他×4
+            const totalCoeff = (thisYearCount * 5) + (otherCount * 4);
+            
+            return {
+                totalCoeff: totalCoeff,
+                thisYearCount: thisYearCount,
+                otherCount: otherCount
+            };
+        }
         
         // ===================== 多少组模式增强版核心计算逻辑 =====================
         const zodiacs = ['鼠', '牛', '虎', '兔', '龙', '龍', '蛇', '马', '馬', '羊', '猴', '鸡', '雞', '狗', '猪', '豬'];
@@ -1027,7 +1062,7 @@
         }
 
         /**
-         * 一肖四数模式计算
+         * 一肖四数模式计算（修改核心逻辑：今年生肖×5，其他×4 + 外层括号格式）
          */
         function calculateOneZodiacFourNumbers(text) {
             const numberPositions = extractAllNumbersWithPosition(text);
@@ -1056,20 +1091,30 @@
                     continue;
                 }
                 
-                const zodiacCount = zodiacs.length;
-                const groupTotal = zodiacCount * 4 * currentNum;
+                // 核心修改：计算生肖系数（今年生肖×5，其他×4）
+                const coeffResult = calculateZodiacCoefficient(zodiacs);
+                const groupTotal = coeffResult.totalCoeff * currentNum;
                 
-                const formattedZodiacCount = formatNumberForDisplay(zodiacCount);
-                const formattedNum = formatNumberForDisplay(currentNum);
-                const formattedTotal = formatNumberForDisplay(groupTotal);
-                const calculation = `${formattedZodiacCount}个生肖 × 4 × ${formattedNum} = ${formattedTotal}`;
+                // ===================== 关键修改：添加外层括号 =====================
+                let calculationDesc = '';
+                if (coeffResult.thisYearCount > 0 && coeffResult.otherCount > 0) {
+                    // 混合情况：(1个今年生肖(蛇)×5 + 1个其他生肖×4) × 50 = 450
+                    calculationDesc = `(${coeffResult.thisYearCount}个<span class="this-year-zodiac">${thisYearZodiac}</span>×5 + ${coeffResult.otherCount}个×4) × ${formatNumberForDisplay(currentNum)} = ${formatNumberForDisplay(groupTotal)}`;
+                } else if (coeffResult.thisYearCount > 0) {
+                    // 只有今年生肖：(1个今年生肖(蛇)×5) × 50 = 250
+                    calculationDesc = `${coeffResult.thisYearCount}个<span class="this-year-zodiac">${thisYearZodiac}</span>×5 × ${formatNumberForDisplay(currentNum)} = ${formatNumberForDisplay(groupTotal)}`;
+                } else {
+                    // 只有其他生肖：(2个生肖×4) × 50 = 400
+                    calculationDesc = `${coeffResult.otherCount}个×4 × ${formatNumberForDisplay(currentNum)} = ${formatNumberForDisplay(groupTotal)}`;
+                }
+                // ===================== 格式修改结束 =====================
                 
                 groups.push({
                     zodiacs: zodiacs,
                     number: currentNum,
-                    displayCount: zodiacCount,
+                    displayCount: zodiacs.length,
                     total: groupTotal,
-                    calculation: calculation
+                    calculation: calculationDesc // 带HTML的计算描述
                 });
             }
             
@@ -1325,7 +1370,7 @@
         }
 
         /**
-         * 显示计算结果
+         * 显示计算结果（支持HTML格式的计算描述）
          */
         function displayResults(groups) {
             const resultSection = document.getElementById('resultSection');
@@ -1344,7 +1389,8 @@
                 
                 const calculation = document.createElement('span');
                 calculation.className = 'result-calculation';
-                calculation.textContent = group.calculation;
+                // 关键：使用innerHTML支持HTML格式（今年生肖标黄）
+                calculation.innerHTML = group.calculation;
                 
                 resultItem.appendChild(groupLabel);
                 resultItem.appendChild(calculation);
