@@ -446,7 +446,7 @@
         
         // ===================== 多少组模式增强版核心计算逻辑 =====================
         const zodiacs = ['鼠', '牛', '虎', '兔', '龙', '龍', '蛇', '马', '馬', '羊', '猴', '鸡', '雞', '狗', '猪', '豬'];
-        const keywords = ['各个组', '各组数', '每组', '各组', '各'];
+        const keywords = ['各个组', '各组数', '每组', '各组', '各' , '落'];
         const separator = ',';
 
         // 汉字数字映射（多少组模式专用）
@@ -1033,7 +1033,7 @@
          */
         function findGeAndNumbers(text) {
             const results = [];
-            const geRegex = /各个数|各数|各/g;
+            const geRegex = /各个数|各数|各|落/g;
             let match;
             
             while ((match = geRegex.exec(text)) !== null) {
@@ -1279,7 +1279,7 @@
                 const geNumbers = findGeAndNumbers(inputText);
                 
                 if (geNumbers.length === 0) {
-                    showError('未找到"各"、"各数"或"各个数"');
+                    showError('未找到"落"、"各"、"各数"或"各个数"');
                     return;
                 }
 
