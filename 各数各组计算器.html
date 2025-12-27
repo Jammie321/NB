@@ -587,34 +587,34 @@
         /**
          * 统计数字之间出现次数最多的符号，替换为"十"
          */
-        function replaceMostFrequentSymbolBetweenNums(text) {
-            const symbolMap = {};
-            const numSymbolReg = /(\d)([^0-9])(\d)/g;
-            let match;
+function replaceMostFrequentSymbolBetweenNums(text) {
+    const symbolMap = {};
+    // ✅ 核心修改：零宽断言正则，只匹配数字间的符号，不占用数字，解决重叠问题
+    const numSymbolReg = /(?<=\d)([^0-9])(?=\d)/g;
+    let match;
 
-            // 统计符号出现次数
-            while ((match = numSymbolReg.exec(text)) !== null) {
-                const symbol = match[2];
-                symbolMap[symbol] = (symbolMap[symbol] || 0) + 1;
-            }
+    // 统计符号频次（逻辑不变，正则匹配更精准）
+    while ((match = numSymbolReg.exec(text)) !== null) {
+        const symbol = match[1]; // 注意：零宽断言正则的分组是 match[1]（仅符号）
+        symbolMap[symbol] = (symbolMap[symbol] || 0) + 1;
+    }
 
-            // 找到出现次数最多的符号
-            let mostFreqSymbol = '';
-            let maxCount = 0;
-            Object.entries(symbolMap).forEach(([symbol, count]) => {
-                if (count > maxCount) {
-                    maxCount = count;
-                    mostFreqSymbol = symbol;
-                }
-            });
-
-            // 替换最多符号为"十"
-            if (mostFreqSymbol) {
-                const replaceReg = new RegExp(`(\\d)${escapeRegExp(mostFreqSymbol)}(\\d)`, 'g');
-                text = text.replace(replaceReg, '$1十$2');
-            }
-            return text;
+    let mostFreqSymbol = '';
+    let maxCount = 0;
+    Object.entries(symbolMap).forEach(([symbol, count]) => {
+        if (count > maxCount) {
+            maxCount = count;
+            mostFreqSymbol = symbol;
         }
+    });
+
+    if (mostFreqSymbol) {
+        // ✅ 替换正则也用零宽断言，保持匹配一致性
+        const replaceReg = new RegExp(`(?<=\\d)${escapeRegExp(mostFreqSymbol)}(?=\\d)`, 'g');
+        text = text.replace(replaceReg, '十'); // 直接替换符号为「十」即可，无需分组
+    }
+    return text;
+}
 
         /**
          * 删除关键词到第一个数字之间的所有字符，仅保留关键词
